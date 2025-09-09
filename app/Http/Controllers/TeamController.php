@@ -8,7 +8,7 @@ class TeamController extends Controller
 {
     public function index()
     {
-        $teams = ['Team Alpha', 'Team Bravo', 'Team Charlie'];
+        $teams = ['PM', 'E'];
         return response()->json($teams);
     }
 }

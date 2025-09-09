@@ -8,7 +8,7 @@ class SachbereichController extends Controller
 {
     public function index()
     {
-        $sachbereiche = ['Anwendungsentwicklung', 'Systemintegration', 'Datenanalyse'];
+        $sachbereiche = ['O-AS', 'O-IB', 'P-E', 'P-PM'];
         return response()->json($sachbereiche);
     }
 }

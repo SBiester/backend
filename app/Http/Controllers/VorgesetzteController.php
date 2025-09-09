@@ -8,7 +8,7 @@ class VorgesetzteController extends Controller
 {
     public function index()
     {
-        $vorgesetzte = ['Wehmann Frank', 'Baumgart Christian', 'Mustermann Max', 'Musterfrau Erika'];
+        $vorgesetzte = ['Wehmann Frank', 'Baumgart Christian', 'Riedel Carsten'];
         return response()->json($vorgesetzte);
     }
 }

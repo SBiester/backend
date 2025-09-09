@@ -8,7 +8,7 @@ class FunktionController extends Controller
 {
     public function index()
     {
-        $funktionen = ['Projektleiter', 'Entwickler', 'Systemadministrator', 'UI/UX Designer'];
+        $funktionen = ['Projektleiter:in', 'Entwickler:in', 'Systemadministrator:in'];
         return response()->json($funktionen);
     }
 }
