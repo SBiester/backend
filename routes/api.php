@@ -14,6 +14,8 @@ use App\Http\Controllers\OptionsController;
 use App\Http\Controllers\JobUpdateController;
 use App\Http\Controllers\SapController;
 use App\Http\Controllers\ReferenzprofilController;
+use App\Http\Controllers\AdminController;
+use App\Http\Controllers\OrderController;
 
 /*
 |--------------------------------------------------------------------------
@@ -43,6 +45,7 @@ Route::get('/hardware/profile', [HardwareController::class, 'getHardwareByProfil
 Route::get('/hardware/additional', [HardwareController::class, 'getAdditionalHardware']);
 Route::get('/hardware/categories', [HardwareController::class, 'getCategories']);
 Route::get('/hardware/category', [HardwareController::class, 'getHardwareByCategory']);
+Route::get('/hardware/search', [HardwareController::class, 'searchHardware']);
 
 // Software API Routes
 Route::get('/software', [SoftwareController::class, 'getAllSoftware']);
@@ -50,6 +53,7 @@ Route::get('/software/profile', [SoftwareController::class, 'getSoftwareByProfil
 Route::get('/software/additional', [SoftwareController::class, 'getAdditionalSoftware']);
 Route::get('/software/manufacturers', [SoftwareController::class, 'getManufacturers']);
 Route::get('/software/manufacturer', [SoftwareController::class, 'getSoftwareByManufacturer']);
+Route::get('/software/search', [SoftwareController::class, 'searchSoftware']);
 
 // Options API Routes
 Route::get('/options', [OptionsController::class, 'getOptions']);
@@ -61,6 +65,58 @@ Route::get('/sap/categories', [SapController::class, 'getSapCategories']);
 Route::get('/sap/category', [SapController::class, 'getSapProfilesByCategory']);
 Route::get('/sap/profile', [SapController::class, 'getSapProfileById']);
 Route::get('/sap/statistics', [SapController::class, 'getSapStatistics']);
+Route::get('/sap/search', [SapController::class, 'searchSapProfiles']);
 
 // Job Update API Routes
 Route::post('/job-update', [JobUpdateController::class, 'submitJobUpdate']);
+
+// Orders API Routes
+Route::get('/orders/user', [OrderController::class, 'getUserOrders']);
+
+// Admin API Routes
+Route::prefix('admin')->group(function () {
+    // Dashboard
+    Route::get('/dashboard/stats', [AdminController::class, 'getDashboardStats']);
+    
+    // User Management
+    Route::get('/users', [AdminController::class, 'getUsers']);
+    Route::post('/users', [AdminController::class, 'createUser']);
+    Route::put('/users/{id}', [AdminController::class, 'updateUser']);
+    Route::delete('/users/{id}', [AdminController::class, 'deleteUser']);
+    
+    // Hardware Management
+    Route::get('/hardware', [AdminController::class, 'getHardwareItems']);
+    Route::post('/hardware', [AdminController::class, 'createHardwareItem']);
+    Route::put('/hardware/{id}', [AdminController::class, 'updateHardwareItem']);
+    Route::delete('/hardware/{id}', [AdminController::class, 'deleteHardwareItem']);
+    
+    // Software Management
+    Route::get('/software', [AdminController::class, 'getSoftwareItems']);
+    Route::post('/software', [AdminController::class, 'createSoftwareItem']);
+    Route::put('/software/{id}', [AdminController::class, 'updateSoftwareItem']);
+    Route::delete('/software/{id}', [AdminController::class, 'deleteSoftwareItem']);
+    
+    // SAP Management
+    Route::get('/sap/roles', [AdminController::class, 'getSapRoles']);
+    Route::get('/sap/groups', [AdminController::class, 'getSapRoleGroups']);
+    Route::post('/sap/roles', [AdminController::class, 'createSapRole']);
+    Route::put('/sap/roles/{id}', [AdminController::class, 'updateSapRole']);
+    Route::delete('/sap/roles/{id}', [AdminController::class, 'deleteSapRole']);
+    Route::post('/sap/groups', [AdminController::class, 'createSapRoleGroup']);
+    Route::put('/sap/groups/{id}', [AdminController::class, 'updateSapRoleGroup']);
+    Route::delete('/sap/groups/{id}', [AdminController::class, 'deleteSapRoleGroup']);
+    
+    // Profile Management
+    Route::get('/profiles', [ReferenzprofilController::class, 'adminIndex']);
+    Route::post('/profiles', [ReferenzprofilController::class, 'store']);
+    Route::put('/profiles/{id}', [ReferenzprofilController::class, 'update']);
+    Route::delete('/profiles/{id}', [ReferenzprofilController::class, 'destroy']);
+    
+    // Order Management (Job-Updates)
+    Route::get('/orders', [OrderController::class, 'index']);
+    Route::get('/orders/stats', [OrderController::class, 'getStats']);
+    Route::get('/orders/export', [OrderController::class, 'exportOrders']);
+    Route::get('/orders/{id}', [OrderController::class, 'show']);
+    Route::put('/orders/{id}/status', [OrderController::class, 'updateStatus']);
+    Route::put('/orders/{id}/process', [OrderController::class, 'processOrder']);
+});
