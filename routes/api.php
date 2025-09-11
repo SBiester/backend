@@ -131,4 +131,20 @@ Route::prefix('admin')->group(function () {
     Route::get('/orders/{id}', [OrderController::class, 'show']);
     Route::put('/orders/{id}/status', [OrderController::class, 'updateStatus']);
     Route::put('/orders/{id}/process', [OrderController::class, 'processOrder']);
+    
+    // Master Data Management
+    Route::get('/bereiche', [AdminController::class, 'getBereiche']);
+    Route::post('/bereiche', [AdminController::class, 'createBereich']);
+    Route::put('/bereiche/{id}', [AdminController::class, 'updateBereich']);
+    Route::delete('/bereiche/{id}', [AdminController::class, 'deleteBereich']);
+    
+    Route::get('/teams', [AdminController::class, 'getTeams']);
+    Route::post('/teams', [AdminController::class, 'createTeam']);
+    Route::put('/teams/{id}', [AdminController::class, 'updateTeam']);
+    Route::delete('/teams/{id}', [AdminController::class, 'deleteTeam']);
+    
+    Route::get('/funktionen', [AdminController::class, 'getFunktionen']);
+    Route::post('/funktionen', [AdminController::class, 'createFunktion']);
+    Route::put('/funktionen/{id}', [AdminController::class, 'updateFunktion']);
+    Route::delete('/funktionen/{id}', [AdminController::class, 'deleteFunktion']);
 });

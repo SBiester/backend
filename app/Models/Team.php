@@ -12,16 +12,16 @@ class Team extends Model
 
     protected $fillable = [
         'Bezeichnung',
-        'FunktionID'
+        'BereichID'
     ];
 
-    public function funktion()
+    public function bereich()
     {
-        return $this->belongsTo(Funktion::class, 'FunktionID', 'FunktionID');
+        return $this->belongsTo(Bereich::class, 'BereichID', 'BereichID');
     }
 
-    public function bereiche()
+    public function funktionen()
     {
-        return $this->hasMany(Bereich::class, 'TeamID', 'TeamID');
+        return $this->hasMany(Funktion::class, 'TeamID', 'TeamID');
     }
 }

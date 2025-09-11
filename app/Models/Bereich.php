@@ -11,13 +11,12 @@ class Bereich extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'Bezeichnung',
-        'TeamID'
+        'Bezeichnung'
     ];
 
-    public function team()
+    public function teams()
     {
-        return $this->belongsTo(Team::class, 'TeamID', 'TeamID');
+        return $this->hasMany(Team::class, 'BereichID', 'BereichID');
     }
 
     public function referenzen()

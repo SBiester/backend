@@ -11,11 +11,12 @@ class Funktion extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'Bezeichnung'
+        'Bezeichnung',
+        'TeamID'
     ];
 
-    public function teams()
+    public function team()
     {
-        return $this->hasMany(Team::class, 'FunktionID', 'FunktionID');
+        return $this->belongsTo(Team::class, 'TeamID', 'TeamID');
     }
 }

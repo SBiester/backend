@@ -13,6 +13,9 @@ use App\Models\Hersteller;
 use App\Models\Referenz;
 use App\Models\Auftrag;
 use App\Models\Kategorie;
+use App\Models\Bereich;
+use App\Models\Team;
+use App\Models\Funktion;
 
 class AdminController extends Controller
 {
@@ -664,6 +667,10 @@ class AdminController extends Controller
     public function getSapRoles(Request $request): JsonResponse
     {
         try {
+            // Validate pagination parameters
+            $perPage = $request->get('per_page', 20);
+            $perPage = max(1, min(100, (int)$perPage)); // Limit between 1 and 100
+            
             $query = Sammelrollen::with('rollengruppe');
 
             if ($request->has('search') && !empty($request->search)) {
@@ -681,7 +688,7 @@ class AdminController extends Controller
                 $query->where('RollengruppeID', $request->group);
             }
 
-            $roles = $query->paginate($request->get('per_page', 20));
+            $roles = $query->paginate($perPage);
 
             return response()->json($roles);
         } catch (\Exception $e) {
@@ -817,6 +824,306 @@ class AdminController extends Controller
             return response()->json(['message' => 'SAP role group deleted successfully']);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Failed to delete SAP role group'], 500);
+        }
+    }
+
+    // ============== Master Data Management ================
+
+    /**
+     * Get all Bereiche
+     */
+    public function getBereiche(): JsonResponse
+    {
+        try {
+            $bereiche = Bereich::orderBy('Bezeichnung')->get()->map(function($bereich) {
+                return [
+                    'BereichID' => $bereich->BereichID,
+                    'Bereich' => $bereich->Bezeichnung
+                ];
+            });
+            return response()->json($bereiche);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to load bereiche'], 500);
+        }
+    }
+
+    /**
+     * Create Bereich
+     */
+    public function createBereich(Request $request): JsonResponse
+    {
+        try {
+            $validatedData = $request->validate([
+                'Bereich' => 'required|string|max:255|unique:tbl_bereich,Bezeichnung'
+            ]);
+
+            $bereich = Bereich::create([
+                'Bezeichnung' => $validatedData['Bereich']
+            ]);
+
+            return response()->json([
+                'message' => 'Bereich created successfully',
+                'bereich' => [
+                    'BereichID' => $bereich->BereichID,
+                    'Bereich' => $bereich->Bezeichnung
+                ]
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to create bereich'], 500);
+        }
+    }
+
+    /**
+     * Update Bereich
+     */
+    public function updateBereich(Request $request, $id): JsonResponse
+    {
+        try {
+            $bereich = Bereich::where('BereichID', $id)->first();
+            if (!$bereich) {
+                return response()->json(['error' => 'Bereich not found'], 404);
+            }
+
+            $validatedData = $request->validate([
+                'Bereich' => 'required|string|max:255|unique:tbl_bereich,Bezeichnung,' . $id . ',BereichID'
+            ]);
+
+            $bereich->update([
+                'Bezeichnung' => $validatedData['Bereich']
+            ]);
+
+            return response()->json([
+                'message' => 'Bereich updated successfully',
+                'bereich' => [
+                    'BereichID' => $bereich->BereichID,
+                    'Bereich' => $bereich->Bezeichnung
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to update bereich'], 500);
+        }
+    }
+
+    /**
+     * Delete Bereich
+     */
+    public function deleteBereich($id): JsonResponse
+    {
+        try {
+            $bereich = Bereich::where('BereichID', $id)->first();
+            if (!$bereich) {
+                return response()->json(['error' => 'Bereich not found'], 404);
+            }
+
+            $bereich->delete();
+
+            return response()->json(['message' => 'Bereich deleted successfully']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to delete bereich'], 500);
+        }
+    }
+
+    /**
+     * Get all Teams
+     */
+    public function getTeams(): JsonResponse
+    {
+        try {
+            $teams = Team::with('bereich')->orderBy('Bezeichnung')->get()->map(function($team) {
+                return [
+                    'TeamID' => $team->TeamID,
+                    'Team' => $team->Bezeichnung,
+                    'BereichID' => $team->BereichID,
+                    'Bereich' => $team->bereich ? $team->bereich->Bezeichnung : null
+                ];
+            });
+            return response()->json($teams);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to load teams'], 500);
+        }
+    }
+
+    /**
+     * Create Team
+     */
+    public function createTeam(Request $request): JsonResponse
+    {
+        try {
+            $validatedData = $request->validate([
+                'Team' => 'required|string|max:255|unique:tbl_team,Bezeichnung',
+                'BereichID' => 'required|exists:tbl_bereich,BereichID'
+            ]);
+
+            $team = Team::create([
+                'Bezeichnung' => $validatedData['Team'],
+                'BereichID' => $validatedData['BereichID']
+            ]);
+
+            return response()->json([
+                'message' => 'Team created successfully',
+                'team' => [
+                    'TeamID' => $team->TeamID,
+                    'Team' => $team->Bezeichnung,
+                    'BereichID' => $team->BereichID
+                ]
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to create team'], 500);
+        }
+    }
+
+    /**
+     * Update Team
+     */
+    public function updateTeam(Request $request, $id): JsonResponse
+    {
+        try {
+            $team = Team::where('TeamID', $id)->first();
+            if (!$team) {
+                return response()->json(['error' => 'Team not found'], 404);
+            }
+
+            $validatedData = $request->validate([
+                'Team' => 'required|string|max:255|unique:tbl_team,Bezeichnung,' . $id . ',TeamID',
+                'BereichID' => 'required|exists:tbl_bereich,BereichID'
+            ]);
+
+            $team->update([
+                'Bezeichnung' => $validatedData['Team'],
+                'BereichID' => $validatedData['BereichID']
+            ]);
+
+            return response()->json([
+                'message' => 'Team updated successfully',
+                'team' => [
+                    'TeamID' => $team->TeamID,
+                    'Team' => $team->Bezeichnung,
+                    'BereichID' => $team->BereichID
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to update team'], 500);
+        }
+    }
+
+    /**
+     * Delete Team
+     */
+    public function deleteTeam($id): JsonResponse
+    {
+        try {
+            $team = Team::where('TeamID', $id)->first();
+            if (!$team) {
+                return response()->json(['error' => 'Team not found'], 404);
+            }
+
+            $team->delete();
+
+            return response()->json(['message' => 'Team deleted successfully']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to delete team'], 500);
+        }
+    }
+
+    /**
+     * Get all Funktionen
+     */
+    public function getFunktionen(): JsonResponse
+    {
+        try {
+            $funktionen = Funktion::with('team')->orderBy('Bezeichnung')->get()->map(function($funktion) {
+                return [
+                    'FunktionID' => $funktion->FunktionID,
+                    'Funktion' => $funktion->Bezeichnung,
+                    'TeamID' => $funktion->TeamID,
+                    'Team' => $funktion->team ? $funktion->team->Bezeichnung : null
+                ];
+            });
+            return response()->json($funktionen);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to load funktionen'], 500);
+        }
+    }
+
+    /**
+     * Create Funktion
+     */
+    public function createFunktion(Request $request): JsonResponse
+    {
+        try {
+            $validatedData = $request->validate([
+                'Funktion' => 'required|string|max:255|unique:tbl_funktion,Bezeichnung',
+                'TeamID' => 'required|exists:tbl_team,TeamID'
+            ]);
+
+            $funktion = Funktion::create([
+                'Bezeichnung' => $validatedData['Funktion'],
+                'TeamID' => $validatedData['TeamID']
+            ]);
+
+            return response()->json([
+                'message' => 'Funktion created successfully',
+                'funktion' => [
+                    'FunktionID' => $funktion->FunktionID,
+                    'Funktion' => $funktion->Bezeichnung,
+                    'TeamID' => $funktion->TeamID
+                ]
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to create funktion'], 500);
+        }
+    }
+
+    /**
+     * Update Funktion
+     */
+    public function updateFunktion(Request $request, $id): JsonResponse
+    {
+        try {
+            $funktion = Funktion::where('FunktionID', $id)->first();
+            if (!$funktion) {
+                return response()->json(['error' => 'Funktion not found'], 404);
+            }
+
+            $validatedData = $request->validate([
+                'Funktion' => 'required|string|max:255|unique:tbl_funktion,Bezeichnung,' . $id . ',FunktionID',
+                'TeamID' => 'required|exists:tbl_team,TeamID'
+            ]);
+
+            $funktion->update([
+                'Bezeichnung' => $validatedData['Funktion'],
+                'TeamID' => $validatedData['TeamID']
+            ]);
+
+            return response()->json([
+                'message' => 'Funktion updated successfully',
+                'funktion' => [
+                    'FunktionID' => $funktion->FunktionID,
+                    'Funktion' => $funktion->Bezeichnung,
+                    'TeamID' => $funktion->TeamID
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to update funktion'], 500);
+        }
+    }
+
+    /**
+     * Delete Funktion
+     */
+    public function deleteFunktion($id): JsonResponse
+    {
+        try {
+            $funktion = Funktion::where('FunktionID', $id)->first();
+            if (!$funktion) {
+                return response()->json(['error' => 'Funktion not found'], 404);
+            }
+
+            $funktion->delete();
+
+            return response()->json(['message' => 'Funktion deleted successfully']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to delete funktion'], 500);
         }
     }
 }
