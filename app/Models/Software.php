@@ -13,7 +13,6 @@ class Software extends Model
     protected $fillable = [
         'Bezeichnung',
         'HerstellerID',
-        'KategorieID',
         'Sammelrollen',
         'aktiv'
     ];
@@ -28,10 +27,6 @@ class Software extends Model
         return $this->belongsTo(Hersteller::class, 'HerstellerID', 'HerstellerID');
     }
 
-    public function kategorie()
-    {
-        return $this->belongsTo(Kategorie::class, 'KategorieID', 'KategorieID');
-    }
 
     public function rollengruppen()
     {

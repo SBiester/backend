@@ -90,11 +90,23 @@ Route::prefix('admin')->group(function () {
     Route::put('/hardware/{id}', [AdminController::class, 'updateHardwareItem']);
     Route::delete('/hardware/{id}', [AdminController::class, 'deleteHardwareItem']);
     
+    // Hardware Categories Management
+    Route::get('/hardware/categories', [AdminController::class, 'getHardwareCategories']);
+    Route::post('/hardware/categories', [AdminController::class, 'createHardwareCategory']);
+    Route::put('/hardware/categories/{id}', [AdminController::class, 'updateHardwareCategory']);
+    Route::delete('/hardware/categories/{id}', [AdminController::class, 'deleteHardwareCategory']);
+    
     // Software Management
     Route::get('/software', [AdminController::class, 'getSoftwareItems']);
     Route::post('/software', [AdminController::class, 'createSoftwareItem']);
     Route::put('/software/{id}', [AdminController::class, 'updateSoftwareItem']);
     Route::delete('/software/{id}', [AdminController::class, 'deleteSoftwareItem']);
+    
+    // Software Manufacturers Management
+    Route::get('/software/manufacturers', [AdminController::class, 'getSoftwareManufacturers']);
+    Route::post('/software/manufacturers', [AdminController::class, 'createSoftwareManufacturer']);
+    Route::put('/software/manufacturers/{id}', [AdminController::class, 'updateSoftwareManufacturer']);
+    Route::delete('/software/manufacturers/{id}', [AdminController::class, 'deleteSoftwareManufacturer']);
     
     // SAP Management
     Route::get('/sap/roles', [AdminController::class, 'getSapRoles']);

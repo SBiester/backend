@@ -12,9 +12,14 @@ class Hardware extends Model
 
     protected $fillable = [
         'Bezeichnung',
-        'Hersteller'
+        'KategorieID'
     ];
 
+    public function kategorie()
+    {
+        return $this->belongsTo(Kategorie::class, 'KategorieID', 'KategorieID');
+    }
+    
     public function referenzen()
     {
         return $this->belongsToMany(Referenz::class, 'tbl_referenz_hardware', 'HardwareID', 'ReferenzID');

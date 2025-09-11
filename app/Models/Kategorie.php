@@ -18,4 +18,9 @@ class Kategorie extends Model
     {
         return $this->hasMany(Software::class, 'KategorieID', 'KategorieID');
     }
+    
+    public function hardware()
+    {
+        return $this->hasMany(Hardware::class, 'KategorieID', 'KategorieID');
+    }
 }

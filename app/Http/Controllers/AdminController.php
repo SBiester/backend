@@ -9,6 +9,10 @@ use App\Models\Hardware;
 use App\Models\Software;
 use App\Models\Rollengruppe;
 use App\Models\Sammelrollen;
+use App\Models\Hersteller;
+use App\Models\Referenz;
+use App\Models\Auftrag;
+use App\Models\Kategorie;
 
 class AdminController extends Controller
 {
@@ -23,20 +27,20 @@ class AdminController extends Controller
             // Users statistics
             $stats['users'] = [
                 'total' => User::count(),
-                'active' => User::where('status', 'active')->count(),
-                'inactive' => User::where('status', 'inactive')->count()
+                'active' => User::count(), // Assuming all users are active for now
+                'inactive' => 0
             ];
 
             // Hardware statistics
             $stats['hardware'] = [
                 'total' => Hardware::count(),
-                'categories' => Hardware::distinct('Hersteller')->count('Hersteller')
+                'categories' => Kategorie::count()
             ];
 
             // Software statistics
             $stats['software'] = [
                 'total' => Software::count(),
-                'manufacturers' => Software::distinct('Hersteller')->count('Hersteller')
+                'manufacturers' => Hersteller::whereHas('software')->count()
             ];
 
             // SAP statistics
@@ -45,9 +49,22 @@ class AdminController extends Controller
                 'groups' => Rollengruppe::count()
             ];
 
+            // Profile statistics
+            $stats['profiles'] = [
+                'total' => Referenz::count(),
+                'departments' => Referenz::distinct('BereichID')->count('BereichID')
+            ];
+
+            // Order statistics
+            $stats['orders'] = [
+                'active' => Auftrag::count(),
+                'pending' => Auftrag::count() // All orders are pending for now
+            ];
+
             return response()->json($stats);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Failed to load dashboard statistics'], 500);
+            \Log::error('Dashboard stats error: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load dashboard statistics: ' . $e->getMessage()], 500);
         }
     }
 
@@ -158,28 +175,33 @@ class AdminController extends Controller
                 $search = $request->search;
                 $query->where(function($q) use ($search) {
                     $q->where('Bezeichnung', 'like', "%{$search}%")
-                      ->orWhere('Hersteller', 'like', "%{$search}%");
+                      ->orWhereHas('kategorie', function($kq) use ($search) {
+                          $kq->where('Bezeichnung', 'like', "%{$search}%");
+                      });
                 });
             }
 
-            // Apply manufacturer filter if provided
-            if ($request->has('manufacturer') && !empty($request->manufacturer)) {
-                $query->where('Hersteller', $request->manufacturer);
+            // Apply category filter if provided
+            if ($request->has('category') && !empty($request->category)) {
+                $query->whereHas('kategorie', function($kq) use ($request) {
+                    $kq->where('Bezeichnung', $request->category);
+                });
             }
 
             // Pagination
             $page = $request->get('page', 1);
             $perPage = $request->get('per_page', 15);
             
-            $hardware = $query->orderBy('Bezeichnung')
+            $hardware = $query->with('kategorie')->orderBy('Bezeichnung')
                 ->paginate($perPage, ['*'], 'page', $page);
 
             $transformedData = $hardware->getCollection()->map(function($item) {
                 return [
                     'id' => $item->HardwareID,
                     'name' => $item->Bezeichnung,
-                    'manufacturer' => $item->Hersteller,
-                    'category' => 'Hardware',
+                    'manufacturer' => 'Hardware', // No manufacturer for hardware
+                    'category' => $item->kategorie->Bezeichnung ?? 'Unbekannt',
+                    'category_id' => $item->KategorieID,
                     'description' => $item->Bezeichnung,
                     'created_at' => $item->created_at ? $item->created_at->format('Y-m-d') : now()->format('Y-m-d')
                 ];
@@ -205,12 +227,12 @@ class AdminController extends Controller
         try {
             $validatedData = $request->validate([
                 'name' => 'required|string|max:255',
-                'manufacturer' => 'required|string|max:255'
+                'category_id' => 'required|exists:tbl_kategorie,KategorieID'
             ]);
 
             $hardware = Hardware::create([
                 'Bezeichnung' => $validatedData['name'],
-                'Hersteller' => $validatedData['manufacturer']
+                'KategorieID' => $validatedData['category_id']
             ]);
 
             return response()->json([
@@ -218,7 +240,7 @@ class AdminController extends Controller
                 'hardware' => [
                     'id' => $hardware->HardwareID,
                     'name' => $hardware->Bezeichnung,
-                    'manufacturer' => $hardware->Hersteller
+                    'category_id' => $hardware->KategorieID
                 ]
             ], 201);
         } catch (\Exception $e) {
@@ -239,12 +261,12 @@ class AdminController extends Controller
 
             $validatedData = $request->validate([
                 'name' => 'required|string|max:255',
-                'manufacturer' => 'required|string|max:255'
+                'category_id' => 'required|exists:tbl_kategorie,KategorieID'
             ]);
 
             $hardware->update([
                 'Bezeichnung' => $validatedData['name'],
-                'Hersteller' => $validatedData['manufacturer']
+                'KategorieID' => $validatedData['category_id']
             ]);
 
             return response()->json([
@@ -252,11 +274,119 @@ class AdminController extends Controller
                 'hardware' => [
                     'id' => $hardware->HardwareID,
                     'name' => $hardware->Bezeichnung,
-                    'manufacturer' => $hardware->Hersteller
+                    'category_id' => $hardware->KategorieID
                 ]
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Failed to update hardware item'], 500);
+        }
+    }
+
+    /**
+     * Get hardware categories
+     */
+    public function getHardwareCategories(): JsonResponse
+    {
+        try {
+            $categories = Kategorie::withCount('hardware')->get();
+            
+            $categoriesData = $categories->map(function($kategorie) {
+                return [
+                    'id' => $kategorie->KategorieID,
+                    'name' => $kategorie->Bezeichnung,
+                    'description' => $kategorie->Bezeichnung,
+                    'hardware_count' => $kategorie->hardware_count
+                ];
+            });
+            
+            return response()->json($categoriesData);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to load hardware categories'], 500);
+        }
+    }
+    
+    /**
+     * Create hardware category
+     */
+    public function createHardwareCategory(Request $request): JsonResponse
+    {
+        try {
+            $validatedData = $request->validate([
+                'name' => 'required|string|max:255|unique:tbl_kategorie,Bezeichnung'
+            ]);
+            
+            $category = Kategorie::create([
+                'Bezeichnung' => $validatedData['name']
+            ]);
+            
+            return response()->json([
+                'message' => 'Hardware category created successfully',
+                'category' => [
+                    'id' => $category->KategorieID,
+                    'name' => $category->Bezeichnung,
+                    'description' => $category->Bezeichnung,
+                    'hardware_count' => 0
+                ]
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to create hardware category'], 500);
+        }
+    }
+    
+    /**
+     * Update hardware category
+     */
+    public function updateHardwareCategory(Request $request, $id): JsonResponse
+    {
+        try {
+            $category = Kategorie::where('KategorieID', $id)->first();
+            if (!$category) {
+                return response()->json(['error' => 'Hardware category not found'], 404);
+            }
+            
+            $validatedData = $request->validate([
+                'name' => 'required|string|max:255|unique:tbl_kategorie,Bezeichnung,' . $id . ',KategorieID'
+            ]);
+            
+            $category->update([
+                'Bezeichnung' => $validatedData['name']
+            ]);
+            
+            return response()->json([
+                'message' => 'Hardware category updated successfully', 
+                'category' => [
+                    'id' => $category->KategorieID,
+                    'name' => $category->Bezeichnung,
+                    'description' => $category->Bezeichnung,
+                    'hardware_count' => $category->hardware()->count()
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to update hardware category'], 500);
+        }
+    }
+    
+    /**
+     * Delete hardware category
+     */
+    public function deleteHardwareCategory($id): JsonResponse
+    {
+        try {
+            $category = Kategorie::where('KategorieID', $id)->first();
+            if (!$category) {
+                return response()->json(['error' => 'Hardware category not found'], 404);
+            }
+            
+            // Check if category has associated hardware
+            if ($category->hardware()->count() > 0) {
+                return response()->json(['error' => 'Cannot delete category with associated hardware'], 400);
+            }
+            
+            $category->delete();
+            
+            return response()->json(['message' => 'Hardware category deleted successfully']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to delete hardware category'], 500);
         }
     }
 
@@ -285,19 +415,15 @@ class AdminController extends Controller
     public function getSoftwareItems(Request $request): JsonResponse
     {
         try {
-            $query = Software::with(['hersteller', 'kategorie']);
+            $query = Software::with(['hersteller']);
 
             // Apply search filter if provided
             if ($request->has('search') && !empty($request->search)) {
                 $search = $request->search;
                 $query->where(function($q) use ($search) {
                     $q->where('Bezeichnung', 'like', "%{$search}%")
-                      ->orWhere('Version', 'like', "%{$search}%")
                       ->orWhereHas('hersteller', function($hq) use ($search) {
                           $hq->where('Bezeichnung', 'like', "%{$search}%");
-                      })
-                      ->orWhereHas('kategorie', function($kq) use ($search) {
-                          $kq->where('Bezeichnung', 'like', "%{$search}%");
                       });
                 });
             }
@@ -309,12 +435,6 @@ class AdminController extends Controller
                 });
             }
 
-            // Apply category filter if provided  
-            if ($request->has('category') && !empty($request->category)) {
-                $query->whereHas('kategorie', function($kq) use ($request) {
-                    $kq->where('Bezeichnung', $request->category);
-                });
-            }
 
             // Pagination
             $page = $request->get('page', 1);
@@ -328,9 +448,7 @@ class AdminController extends Controller
                     'id' => $item->SoftwareID,
                     'name' => $item->Bezeichnung,
                     'manufacturer' => $item->hersteller->Bezeichnung ?? 'Unbekannt',
-                    'category' => $item->kategorie->Bezeichnung ?? 'Unbekannt',
-                    'version' => $item->Version,
-                    'license_type' => $item->Lizenztyp ?? 'Unbekannt',
+                    'manufacturer_id' => $item->HerstellerID,
                     'created_at' => $item->created_at ? $item->created_at->format('Y-m-d') : now()->format('Y-m-d')
                 ];
             });
@@ -343,7 +461,8 @@ class AdminController extends Controller
                 'total' => $software->total()
             ]);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Failed to load software items'], 500);
+            \Log::error('Software load error: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to load software items: ' . $e->getMessage()], 500);
         }
     }
 
@@ -355,31 +474,26 @@ class AdminController extends Controller
         try {
             $validatedData = $request->validate([
                 'name' => 'required|string|max:255',
-                'manufacturer_id' => 'required|integer',
-                'category_id' => 'required|integer',
-                'version' => 'nullable|string|max:50',
-                'license_type' => 'nullable|string|max:100'
+                'manufacturer_id' => 'required|integer'
             ]);
 
             $software = Software::create([
                 'Bezeichnung' => $validatedData['name'],
                 'HerstellerID' => $validatedData['manufacturer_id'],
-                'KategorieID' => $validatedData['category_id'],
-                'Version' => $validatedData['version'] ?? '',
-                'Lizenztyp' => $validatedData['license_type'] ?? ''
+                'Sammelrollen' => false,
+                'aktiv' => true
             ]);
 
             return response()->json([
                 'message' => 'Software item created successfully',
                 'software' => [
                     'id' => $software->SoftwareID,
-                    'name' => $software->Bezeichnung,
-                    'version' => $software->Version,
-                    'license_type' => $software->Lizenztyp
+                    'name' => $software->Bezeichnung
                 ]
             ], 201);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Failed to create software item'], 500);
+            \Log::error('Software creation error: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to create software item: ' . $e->getMessage()], 500);
         }
     }
 
@@ -396,31 +510,132 @@ class AdminController extends Controller
 
             $validatedData = $request->validate([
                 'name' => 'required|string|max:255',
-                'manufacturer_id' => 'required|integer',
-                'category_id' => 'required|integer',
-                'version' => 'nullable|string|max:50',
-                'license_type' => 'nullable|string|max:100'
+                'manufacturer_id' => 'required|integer'
             ]);
 
             $software->update([
                 'Bezeichnung' => $validatedData['name'],
-                'HerstellerID' => $validatedData['manufacturer_id'],
-                'KategorieID' => $validatedData['category_id'],
-                'Version' => $validatedData['version'] ?? '',
-                'Lizenztyp' => $validatedData['license_type'] ?? ''
+                'HerstellerID' => $validatedData['manufacturer_id']
             ]);
 
             return response()->json([
                 'message' => 'Software item updated successfully',
                 'software' => [
                     'id' => $software->SoftwareID,
-                    'name' => $software->Bezeichnung,
-                    'version' => $software->Version,
-                    'license_type' => $software->Lizenztyp
+                    'name' => $software->Bezeichnung
                 ]
             ]);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Failed to update software item'], 500);
+            \Log::error('Software update error: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to update software item: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Get software manufacturers
+     */
+    public function getSoftwareManufacturers(): JsonResponse
+    {
+        try {
+            $manufacturers = Hersteller::withCount('software')->get();
+            
+            $manufacturersData = $manufacturers->map(function($hersteller) {
+                return [
+                    'id' => $hersteller->HerstellerID,
+                    'name' => $hersteller->Bezeichnung,
+                    'description' => $hersteller->Bezeichnung,
+                    'software_count' => $hersteller->software_count
+                ];
+            });
+            
+            return response()->json($manufacturersData);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to load software manufacturers'], 500);
+        }
+    }
+    
+    /**
+     * Create software manufacturer
+     */
+    public function createSoftwareManufacturer(Request $request): JsonResponse
+    {
+        try {
+            $validatedData = $request->validate([
+                'name' => 'required|string|max:255|unique:tbl_hersteller,Bezeichnung'
+            ]);
+            
+            $manufacturer = Hersteller::create([
+                'Bezeichnung' => $validatedData['name']
+            ]);
+            
+            return response()->json([
+                'message' => 'Software manufacturer created successfully',
+                'manufacturer' => [
+                    'id' => $manufacturer->HerstellerID,
+                    'name' => $manufacturer->Bezeichnung,
+                    'description' => $manufacturer->Bezeichnung,
+                    'software_count' => 0
+                ]
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to create software manufacturer'], 500);
+        }
+    }
+    
+    /**
+     * Update software manufacturer
+     */
+    public function updateSoftwareManufacturer(Request $request, $id): JsonResponse
+    {
+        try {
+            $manufacturer = Hersteller::where('HerstellerID', $id)->first();
+            if (!$manufacturer) {
+                return response()->json(['error' => 'Software manufacturer not found'], 404);
+            }
+            
+            $validatedData = $request->validate([
+                'name' => 'required|string|max:255|unique:tbl_hersteller,Bezeichnung,' . $id . ',HerstellerID'
+            ]);
+            
+            $manufacturer->update([
+                'Bezeichnung' => $validatedData['name']
+            ]);
+            
+            return response()->json([
+                'message' => 'Software manufacturer updated successfully', 
+                'manufacturer' => [
+                    'id' => $manufacturer->HerstellerID,
+                    'name' => $manufacturer->Bezeichnung,
+                    'description' => $manufacturer->Bezeichnung,
+                    'software_count' => $manufacturer->software()->count()
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to update software manufacturer'], 500);
+        }
+    }
+    
+    /**
+     * Delete software manufacturer
+     */
+    public function deleteSoftwareManufacturer($id): JsonResponse
+    {
+        try {
+            $manufacturer = Hersteller::where('HerstellerID', $id)->first();
+            if (!$manufacturer) {
+                return response()->json(['error' => 'Software manufacturer not found'], 404);
+            }
+            
+            // Check if manufacturer has associated software
+            if ($manufacturer->software()->count() > 0) {
+                return response()->json(['error' => 'Cannot delete manufacturer with associated software'], 400);
+            }
+            
+            $manufacturer->delete();
+            
+            return response()->json(['message' => 'Software manufacturer deleted successfully']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to delete software manufacturer'], 500);
         }
     }
 
@@ -496,7 +711,7 @@ class AdminController extends Controller
             $validatedData = $request->validate([
                 'Bezeichnung' => 'required|string|max:255',
                 'Schluessel' => 'nullable|string|max:100',
-                'RollengruppeID' => 'required|exists:Rollengruppe,RollengruppeID'
+                'RollengruppeID' => 'required|exists:tbl_rollengruppe,RollengruppeID'
             ]);
 
             $role = Sammelrollen::create($validatedData);
@@ -519,7 +734,7 @@ class AdminController extends Controller
             $validatedData = $request->validate([
                 'Bezeichnung' => 'required|string|max:255',
                 'Schluessel' => 'nullable|string|max:100',
-                'RollengruppeID' => 'required|exists:Rollengruppe,RollengruppeID'
+                'RollengruppeID' => 'required|exists:tbl_rollengruppe,RollengruppeID'
             ]);
 
             $role->update($validatedData);
