@@ -15,17 +15,23 @@ class ReferenzprofilController extends Controller
     public function index(): JsonResponse
     {
         try {
-            $referenzprofile = Referenz::with(['bereich.team.funktion', 'software', 'hardware', 'sammelrollen'])
+            $referenzprofile = Referenz::with(['bereich.teams', 'software', 'hardware', 'sammelrollen'])
                 ->where('aktiv', true)
                 ->orderBy('Bezeichnung')
                 ->get()
                 ->map(function($referenz) {
+                    $team = null;
+                    if ($referenz->bereich && $referenz->bereich->teams->isNotEmpty()) {
+                        // Get first team of the bereich as default
+                        $team = $referenz->bereich->teams->first()->Bezeichnung ?? null;
+                    }
+                    
                     return [
                         'id' => $referenz->ReferenzID,
                         'name' => $referenz->Bezeichnung,
                         'bereich' => $referenz->bereich ? $referenz->bereich->Bezeichnung : null,
-                        'category' => $referenz->bereich && $referenz->bereich->team && $referenz->bereich->team->funktion 
-                            ? $referenz->bereich->team->funktion->Bezeichnung : 'Allgemein',
+                        'team' => $team,
+                        'category' => 'Allgemein',
                         'description' => 'Referenzprofil für ' . $referenz->Bezeichnung,
                         'softwareCount' => $referenz->software->count(),
                         'hardwareCount' => $referenz->hardware->count(),
@@ -51,7 +57,7 @@ class ReferenzprofilController extends Controller
         }
 
         try {
-            $referenzprofile = Referenz::with(['bereich.team.funktion', 'software', 'hardware', 'sammelrollen'])
+            $referenzprofile = Referenz::with(['bereich', 'software', 'hardware', 'sammelrollen'])
                 ->whereHas('bereich', function($query) use ($bereich) {
                     $query->where('Bezeichnung', 'like', "%{$bereich}%");
                 })
@@ -84,9 +90,16 @@ class ReferenzprofilController extends Controller
         try {
             $validatedData = $request->validate([
                 'name' => 'required|string|max:255',
-                'bereich_id' => 'required|integer|exists:tbl_bereich,BereichID',
+                'bereich_id' => 'nullable|integer|exists:tbl_bereich,BereichID',
                 'description' => 'nullable|string',
-                'aktiv' => 'boolean'
+                'team' => 'nullable|string', // Accept team but don't save (for future compatibility)
+                'aktiv' => 'boolean',
+                'hardwareItems' => 'array',
+                'hardwareItems.*' => 'integer',
+                'softwareItems' => 'array', 
+                'softwareItems.*' => 'integer',
+                'sapItems' => 'array',
+                'sapItems.*' => 'integer'
             ]);
 
             $referenz = Referenz::create([
@@ -95,17 +108,38 @@ class ReferenzprofilController extends Controller
                 'aktiv' => $validatedData['aktiv'] ?? true
             ]);
 
+            // Attach hardware relationships
+            if (isset($validatedData['hardwareItems']) && !empty($validatedData['hardwareItems'])) {
+                $referenz->hardware()->sync($validatedData['hardwareItems']);
+            }
+
+            // Attach software relationships
+            if (isset($validatedData['softwareItems']) && !empty($validatedData['softwareItems'])) {
+                $referenz->software()->sync($validatedData['softwareItems']);
+            }
+
+            // Attach SAP profile relationships
+            if (isset($validatedData['sapItems']) && !empty($validatedData['sapItems'])) {
+                $referenz->sammelrollen()->sync($validatedData['sapItems']);
+            }
+
+            // Load relationships for response
+            $referenz->load(['bereich', 'hardware', 'software', 'sammelrollen']);
+
             return response()->json([
                 'message' => 'Reference profile created successfully', 
                 'profile' => [
                     'id' => $referenz->ReferenzID,
                     'name' => $referenz->Bezeichnung,
                     'bereich_id' => $referenz->BereichID,
-                    'aktiv' => $referenz->aktiv
+                    'aktiv' => $referenz->aktiv,
+                    'hardwareCount' => $referenz->hardware->count(),
+                    'softwareCount' => $referenz->software->count(),
+                    'sapProfileCount' => $referenz->sammelrollen->count()
                 ]
             ], 201);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Failed to create profile'], 500);
+            return response()->json(['error' => 'Failed to create profile: ' . $e->getMessage()], 500);
         }
     }
 
@@ -122,15 +156,41 @@ class ReferenzprofilController extends Controller
 
             $validatedData = $request->validate([
                 'name' => 'required|string|max:255',
-                'bereich_id' => 'required|integer|exists:tbl_bereich,BereichID',
-                'aktiv' => 'boolean'
+                'bereich_id' => 'nullable|integer|exists:tbl_bereich,BereichID',
+                'team' => 'nullable|string', // Accept team but don't save (for future compatibility)
+                'aktiv' => 'boolean',
+                'hardwareItems' => 'array',
+                'hardwareItems.*' => 'integer',
+                'softwareItems' => 'array', 
+                'softwareItems.*' => 'integer',
+                'sapItems' => 'array',
+                'sapItems.*' => 'integer'
             ]);
 
+            // Update basic profile information
             $referenz->update([
                 'Bezeichnung' => $validatedData['name'],
-                'BereichID' => $validatedData['bereich_id'],
+                'BereichID' => $validatedData['bereich_id'] ?? $referenz->BereichID,
                 'aktiv' => $validatedData['aktiv'] ?? $referenz->aktiv
             ]);
+
+            // Update hardware relationships
+            if (isset($validatedData['hardwareItems'])) {
+                $referenz->hardware()->sync($validatedData['hardwareItems']);
+            }
+
+            // Update software relationships
+            if (isset($validatedData['softwareItems'])) {
+                $referenz->software()->sync($validatedData['softwareItems']);
+            }
+
+            // Update SAP profile relationships
+            if (isset($validatedData['sapItems'])) {
+                $referenz->sammelrollen()->sync($validatedData['sapItems']);
+            }
+
+            // Reload with relationships for response
+            $referenz->load(['bereich', 'hardware', 'software', 'sammelrollen']);
 
             return response()->json([
                 'message' => 'Profile updated successfully', 
@@ -138,11 +198,14 @@ class ReferenzprofilController extends Controller
                     'id' => $referenz->ReferenzID,
                     'name' => $referenz->Bezeichnung,
                     'bereich_id' => $referenz->BereichID,
-                    'aktiv' => $referenz->aktiv
+                    'aktiv' => $referenz->aktiv,
+                    'hardwareCount' => $referenz->hardware->count(),
+                    'softwareCount' => $referenz->software->count(),
+                    'sapProfileCount' => $referenz->sammelrollen->count()
                 ]
             ]);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Failed to update profile'], 500);
+            return response()->json(['error' => 'Failed to update profile: ' . $e->getMessage()], 500);
         }
     }
 
@@ -172,7 +235,12 @@ class ReferenzprofilController extends Controller
     public function adminIndex(Request $request): JsonResponse
     {
         try {
-            $query = Referenz::with(['bereich.team.funktion', 'software', 'hardware', 'sammelrollen']);
+            $query = Referenz::with([
+                'bereich.teams', 
+                'software.hersteller', 
+                'hardware.kategorie', 
+                'sammelrollen.rollengruppe'
+            ]);
 
             // Apply search filter
             if ($request->has('search') && !empty($request->search)) {
@@ -205,19 +273,48 @@ class ReferenzprofilController extends Controller
             $profiles = $query->paginate($perPage, ['*'], 'page', $page);
 
             $transformedData = $profiles->getCollection()->map(function($referenz) {
+                $team = null;
+                if ($referenz->bereich && $referenz->bereich->teams->isNotEmpty()) {
+                    // Get first team of the bereich as default
+                    $team = $referenz->bereich->teams->first()->Bezeichnung ?? null;
+                }
+                
                 return [
                     'id' => $referenz->ReferenzID,
                     'name' => $referenz->Bezeichnung,
                     'bereich' => $referenz->bereich ? $referenz->bereich->Bezeichnung : 'Unbekannt',
-                    'category' => $referenz->bereich && $referenz->bereich->team && $referenz->bereich->team->funktion 
-                        ? $referenz->bereich->team->funktion->Bezeichnung : 'Allgemein',
+                    'team' => $team,
+                    'category' => 'Allgemein',
                     'description' => 'Referenzprofil für ' . $referenz->Bezeichnung,
                     'hardwareCount' => $referenz->hardware->count(),
                     'softwareCount' => $referenz->software->count(),
                     'sapProfileCount' => $referenz->sammelrollen->count(),
                     'status' => $referenz->aktiv ? 'aktiv' : 'inaktiv',
                     'isTemplate' => true,
-                    'created_at' => $referenz->created_at ? $referenz->created_at->format('Y-m-d') : now()->format('Y-m-d')
+                    'created_at' => $referenz->created_at ? $referenz->created_at->format('Y-m-d') : now()->format('Y-m-d'),
+                    'hardwareItems' => $referenz->hardware->map(function($hardware) {
+                        return [
+                            'id' => $hardware->HardwareID,
+                            'name' => $hardware->Bezeichnung,
+                            'category' => $hardware->kategorie ? $hardware->kategorie->Bezeichnung : 'Unbekannt'
+                        ];
+                    }),
+                    'softwareItems' => $referenz->software->map(function($software) {
+                        return [
+                            'id' => $software->SoftwareID,
+                            'name' => $software->Bezeichnung,
+                            'manufacturer' => $software->hersteller ? $software->hersteller->Bezeichnung : 'Unbekannt'
+                        ];
+                    }),
+                    'sapItems' => $referenz->sammelrollen->map(function($sammelrolle) {
+                        return [
+                            'id' => $sammelrolle->SammelrollenID,
+                            'Bezeichnung' => $sammelrolle->Bezeichnung,
+                            'Rollengruppe' => $sammelrolle->rollengruppe ? [
+                                'Bezeichnung' => $sammelrolle->rollengruppe->Bezeichnung
+                            ] : null
+                        ];
+                    })
                 ];
             });
 

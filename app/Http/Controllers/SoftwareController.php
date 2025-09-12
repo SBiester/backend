@@ -23,7 +23,7 @@ class SoftwareController extends Controller
         }
 
         try {
-            $referenz = Referenz::with(['software.hersteller', 'software.kategorie'])
+            $referenz = Referenz::with(['software.hersteller'])
                 ->where('Bezeichnung', $profileName)
                 ->first();
             
@@ -35,7 +35,7 @@ class SoftwareController extends Controller
                 return [
                     'id' => $item->SoftwareID,
                     'name' => $item->Bezeichnung,
-                    'category' => $item->kategorie ? $item->kategorie->Bezeichnung : 'Unbekannt',
+                    'category' => 'Software',
                     'manufacturer' => $item->hersteller ? $item->hersteller->Bezeichnung : 'Unbekannt',
                     'description' => $item->Bezeichnung,
                     'aktiv' => $item->aktiv

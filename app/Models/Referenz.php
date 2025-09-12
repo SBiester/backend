@@ -15,6 +15,11 @@ class Referenz extends Model
         'BereichID',
         'aktiv'
     ];
+    
+    // Allow null values for BereichID
+    protected $attributes = [
+        'aktiv' => true
+    ];
 
     protected $casts = [
         'aktiv' => 'boolean'
@@ -22,7 +27,9 @@ class Referenz extends Model
 
     public function bereich()
     {
-        return $this->belongsTo(Bereich::class, 'BereichID', 'BereichID');
+        return $this->belongsTo(Bereich::class, 'BereichID', 'BereichID')->withDefault([
+            'Bezeichnung' => 'Kein Bereich zugeordnet'
+        ]);
     }
 
     public function software()
